@@ -1,0 +1,16 @@
+[
+  {
+    "id": "max_num_posters",
+    "label": "Maximum Number of Posters",
+    "type": "enum",
+    "values": [ "5", "10", "20" ],
+    "default": "5"
+  },
+  {
+    "id": "max_num_arts",
+    "label": "Maximum Number of Arts",
+    "type": "enum",
+    "values": [ "5", "10", "20" ],
+    "default": "5"
+  }
+]

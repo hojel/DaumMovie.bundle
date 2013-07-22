@@ -60,7 +60,7 @@ class DaumMovieAgent(Agent.Movies):
       metadata.genres.add(item['genreName'])
     try: metadata.duration = int(info['showtime'])*60
     except: pass
-    metadata.summary = info['plot']
+    metadata.summary = String.DecodeHTMLEntities(String.StripTags(info['plot']).strip())
     poster_url = info['photo']['fullname']
 
     # (2) cast crew

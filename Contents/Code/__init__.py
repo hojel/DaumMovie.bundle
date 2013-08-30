@@ -62,7 +62,15 @@ class DaumMovieAgent(Agent.Movies):
     except: pass
     metadata.summary = String.DecodeHTMLEntities(String.StripTags(info['plot']).strip())
     poster_url = info['photo']['fullname']
-
+    
+    # countries
+    metadata.countries.clear()
+    for item in info['countries']:
+      metadata.countries.add(item['countryKo'])
+      
+    # Release Date
+    metadata.originally_available_at = Datetime.ParseDate(info['releaseDate']).date()
+    
     # (2) cast crew
     metadata.directors.clear()
     metadata.writers.clear()

@@ -54,12 +54,17 @@ class DaumMovieAgent(Agent.Movies):
     metadata.title = info['titleKo']
     metadata.original_title = info['titleEn']
     metadata.year = int(info['prodYear'])
-    metadata.rating = float(info['moviePoint']['inspectPointAvg'])
+    
+    try: metadata.rating = float(info['moviePoint']['inspectPointAvg'])
+    except: pass
+  
     metadata.genres.clear()
     for item in info['genres']:
       metadata.genres.add(item['genreName'])
+    
     try: metadata.duration = int(info['showtime'])*60
     except: pass
+    
     metadata.summary = String.DecodeHTMLEntities(String.StripTags(info['plot']).strip())
     poster_url = info['photo']['fullname']
     

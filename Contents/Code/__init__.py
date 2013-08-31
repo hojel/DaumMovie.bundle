@@ -69,7 +69,8 @@ class DaumMovieAgent(Agent.Movies):
       metadata.countries.add(item['countryKo'])
       
     # Release Date
-    metadata.originally_available_at = Datetime.ParseDate(info['releaseDate']).date()
+    try: metadata.originally_available_at = Datetime.ParseDate(info['releaseDate']).date()
+    except: pass
     
     # (2) cast crew
     metadata.directors.clear()

@@ -12,5 +12,19 @@
     "type": "enum",
     "values": [ "5", "10", "20" ],
     "default": "5"
+  },
+  {
+    "id": "override_movie_id",
+    "label": "Override metadata id for Movie",
+    "type": "enum",
+    "values": [ "None", "IMDB" ],
+    "default": "None"
+  },
+  {
+    "id": "override_tv_id",
+    "label": "Override metadata id for TV shows",
+    "type": "enum",
+    "values": [ "None", "TVDB" ],
+    "default": "None"
   }
 ]

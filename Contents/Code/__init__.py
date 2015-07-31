@@ -13,7 +13,7 @@ DAUM_TV_DETAIL    = "http://m.movie.daum.net/data/movie/tv/detail.json?tvProgram
 DAUM_TV_DETAIL2   = "http://movie.daum.net/tv/detail/main.do?tvProgramId=%s"
 DAUM_TV_CAST      = "http://m.movie.daum.net/data/movie/tv/cast_crew.json?pageNo=1&pageSize=100&tvProgramId=%s"
 DAUM_TV_PHOTO     = "http://m.movie.daum.net/data/movie/photo/tv/list.json?pageNo=1&pageSize=100&id=%s"
-DAUM_TV_EPISODE   = "http://m.movie.daum.net/data/movie/tv/episode.json?pageNo=1&pageSize=1000&tvProgramId=%s"
+DAUM_TV_EPISODE   = "http://m.movie.daum.net/m/tv/episode?tvProgramId=%s"
 
 IMDB_TITLE_SRCH   = "http://www.google.com/search?q=site:imdb.com+%s"
 TVDB_TITLE_SRCH   = "http://thetvdb.com/api/GetSeries.php?seriesname=%s"
@@ -145,23 +145,17 @@ def updateDaumMovie(cate, metadata):
 
   if cate == 'tv':
     # (4) from episode page
-    data = JSON.ObjectFromURL(url=DAUM_TV_EPISODE % metadata.id)
-    for item in data['data']:
-      episode_num = item['episodeSeq']
-      episode = metadata.seasons['1'].episodes[episode_num]
-      episode.title = item['episodeTitle']
-      episode.summary = item['episodeIntroduce'].strip()
-      if item['telecastDate']:
-        episode.originally_available_at = Datetime.ParseDate(item['telecastDate']).date()
-      try: episode.rating = float(item['rate'])
-      except: pass
-      episode.directors.clear()
-      episode.writers.clear()
-      for name in directors:
-        episode.directors.add(name)
-      for name in writers:
-        episode.writers.add(name)
-      #episode.thumbs[thumb_url] = Proxy.Preview(thumb_data)
+    page = HTTP.Request(DAUM_TV_EPISODE % metadata.id).content
+    match = Regex('MoreView\.init\(\d+, (.*), \$\(', Regex.DOTALL).search(page)
+    if match:
+      data = JSON.ObjectFromString(match.group(1))
+      for item in data:
+        episode_num = item['sequence']
+        episode = metadata.seasons['1'].episodes[episode_num]
+        episode.title = item['title']
+        episode.summary = item['introduceDescription'].strip()
+        if item['channels'][0]['broadcastDate']:
+          episode.originally_available_at = Datetime.ParseDate(item['channels'][0]['broadcastDate'], '%Y%m%d').date()
 
     # (5) fill missing info
     if Prefs['override_tv_id'] != 'None':

@@ -156,6 +156,15 @@ def updateDaumMovie(cate, metadata):
         episode.summary = item['introduceDescription'].strip()
         if item['channels'][0]['broadcastDate']:
           episode.originally_available_at = Datetime.ParseDate(item['channels'][0]['broadcastDate'], '%Y%m%d').date()
+        try: episode.rating = float(item['rate'])
+        except: pass
+        episode.directors.clear()
+        episode.writers.clear()
+        for name in directors:
+          episode.directors.add(name)
+        for name in writers:
+          episode.writers.add(name)
+        #episode.thumbs[thumb_url] = Proxy.Preview(thumb_data)
 
     # (5) fill missing info
     if Prefs['override_tv_id'] != 'None':

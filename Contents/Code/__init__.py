@@ -140,8 +140,19 @@ def updateDaumMovie(cate, metadata):
       metadata.art[art_url] = Proxy.Preview(art, sort_order = idx_art)
   Log.Debug('Total %d posters, %d artworks' %(idx_poster, idx_art))
   if idx_poster == 0:
-    poster = HTTP.Request( poster_url )
-    metadata.posters[poster_url] = Proxy.Media(poster)
+    if poster_url:
+      poster = HTTP.Request( poster_url )
+      metadata.posters[poster_url] = Proxy.Media(poster)
+    else:
+      url = 'http://m.movie.daum.net/m/tv/main?tvProgramId=%s' % metadata.id
+      html = HTML.ElementFromURL( url )
+      arts = html.xpath('//img[@class="thumb_program"]')
+      for art in arts:
+        art_url = art.attrib['src']
+        if not art_url: continue
+        art = HTTP.Request( art_url )
+        idx_poster += 1
+        metadata.posters[art_url] = Proxy.Preview(art, sort_order = idx_poster)
 
   if cate == 'tv':
     # (4) from episode page

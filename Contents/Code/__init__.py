@@ -9,7 +9,7 @@ DAUM_MOVIE_DETAIL = "http://m.movie.daum.net/data/movie/movie_info/detail.json?m
 DAUM_MOVIE_CAST   = "http://m.movie.daum.net/data/movie/movie_info/cast_crew.json?pageNo=1&pageSize=100&movieId=%s"
 DAUM_MOVIE_PHOTO  = "http://m.movie.daum.net/data/movie/photo/movie/list.json?pageNo=1&pageSize=100&id=%s"
 
-DAUM_TV_DETAIL    = "http://m.movie.daum.net/data/movie/tv/detail.json?tvProgramId=%s"
+DAUM_TV_DETAIL    = "http://m.movie.daum.net/m/tv/main.json?tvProgramId=%s"
 DAUM_TV_DETAIL2   = "http://movie.daum.net/tv/detail/main.do?tvProgramId=%s"
 DAUM_TV_CAST      = "http://m.movie.daum.net/data/movie/tv/cast_crew.json?pageNo=1&pageSize=100&tvProgramId=%s"
 DAUM_TV_PHOTO     = "http://m.movie.daum.net/data/movie/photo/tv/list.json?pageNo=1&pageSize=100&id=%s"
@@ -58,22 +58,32 @@ def searchDaumMovie(cate, results, media, lang):
 
 def updateDaumMovie(cate, metadata):
   # (1) from detail page
-  url_tmpl = DAUM_TV_DETAIL if cate == 'tv' else DAUM_MOVIE_DETAIL
-  data = JSON.ObjectFromURL(url=url_tmpl % metadata.id)
-  info = data['data']
-  metadata.title = info['titleKo']
-  metadata.original_title = info['titleEn']
-  metadata.genres.clear()
+  poster_url = None
+  
   if cate == 'tv':
-    try: metadata.rating = float(info['tvProgramPoint']['pointAvg'])
-    except: pass
-    metadata.genres.add(info['categoryHigh']['codeName'])
-    metadata.studio = info['channel']['titleKo'] if info['channel'] else ''
-    metadata.duration = 0
-    try: metadata.originally_available_at = Datetime.ParseDate(info['startDate']).date()
-    except: pass
-    metadata.summary = String.DecodeHTMLEntities(String.StripTags(info['introduce']).strip())
+    page = HTTP.Request( DAUM_TV_DETAIL % metadata.id ).content
+    match = Regex('(.*programInfo.*),"relatedInfoUrls').search(page)
+    if match:
+      data = JSON.ObjectFromString(match.group(1) + '}}')
+      info = data['programInfo']
+      metadata.title = info['name']
+      metadata.original_title = info['nameEn']
+      metadata.genres.clear()
+      try: metadata.rating = float(data['userTvProgramRatingAverage']['avg_point'])
+      except: pass
+      metadata.genres.add(info['genre'])
+      metadata.studio = info['channels'][0]['name']
+      metadata.duration = 0
+      try: metadata.originally_available_at = Datetime.ParseDate(info['channels'][0]['startDate']).date()
+      except: pass
+      metadata.summary = String.DecodeHTMLEntities(String.StripTags(info['introduceDescription']).strip())
+      poster_url = info['mainImageUrl']
   else:
+    data = JSON.ObjectFromURL(url=DAUM_MOVIE_DETAIL % metadata.id)
+    info = data['data']
+    metadata.title = info['titleKo']
+    metadata.original_title = info['titleEn']
+    metadata.genres.clear()
     metadata.year = int(info['prodYear'])
     try: metadata.rating = float(info['moviePoint']['inspectPointAvg'])
     except: pass
@@ -89,7 +99,7 @@ def updateDaumMovie(cate, metadata):
     for item in info['countries']:
       metadata.countries.add(item['countryKo'])
 
-  poster_url = info['photo']['fullname']
+    poster_url = info['photo']['fullname']
 
   # (2) cast crew
   directors = list()

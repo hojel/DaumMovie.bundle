@@ -49,7 +49,6 @@ def searchDaumMovie(cate, results, media, lang):
 
 def updateDaumMovie(cate, metadata):
   # (1) from detail page
-  Log.Debug("updateDaumMovie: %s, %s, %s" % (cate, metadata.id, metadata.title))
   poster_url = None
   
   if cate == 'tv':
@@ -136,13 +135,15 @@ def updateDaumMovie(cate, metadata):
       art_url = item['fullname']
       if not art_url: continue
       #art_url = RE_PHOTO_SIZE.sub("/image/", art_url)
-      try: metadata.posters[art_url] = Proxy.Preview(HTTP.Request(item['thumbnail']), sort_order = idx_poster++)
+      idx_poster += 1
+      try: metadata.posters[art_url] = Proxy.Preview(HTTP.Request(item['thumbnail']), sort_order = idx_poster)
       except: pass
     elif item['photoCategory'] in ['2', '50'] and idx_art < max_art:
       art_url = item['fullname']
       if not art_url: continue
       #art_url = RE_PHOTO_SIZE.sub("/image/", art_url)
-      try: metadata.art[art_url] = Proxy.Preview(HTTP.Request(item['thumbnail']), sort_order = idx_art++)
+      idx_art += 1
+      try: metadata.art[art_url] = Proxy.Preview(HTTP.Request(item['thumbnail']), sort_order = idx_art)
       except: pass
   Log.Debug('Total %d posters, %d artworks' %(idx_poster, idx_art))
   if idx_poster == 0:

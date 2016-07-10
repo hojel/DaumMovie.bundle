@@ -3,16 +3,17 @@
 
 import urllib, unicodedata
 
-DAUM_MOVIE_SRCH   = "http://m.movie.daum.net/data/movie/search/v2/%s.json?size=20&start=1&searchText=%s"
+DAUM_MOVIE_SRCH   = "http://movie.daum.net/data/movie/search/v2/%s.json?size=20&start=1&searchText=%s"
 
-DAUM_MOVIE_DETAIL = "http://m.movie.daum.net/data/movie/movie_info/detail.json?movieId=%s"
-DAUM_MOVIE_CAST   = "http://m.movie.daum.net/data/movie/movie_info/cast_crew.json?pageNo=1&pageSize=100&movieId=%s"
-DAUM_MOVIE_PHOTO  = "http://m.movie.daum.net/data/movie/photo/movie/list.json?pageNo=1&pageSize=100&id=%s"
+DAUM_MOVIE_DETAIL = "http://movie.daum.net/data/movie/movie_info/detail.json?movieId=%s"
+DAUM_MOVIE_CAST   = "http://movie.daum.net/data/movie/movie_info/cast_crew.json?pageNo=1&pageSize=100&movieId=%s"
+DAUM_MOVIE_PHOTO  = "http://movie.daum.net/data/movie/photo/movie/list.json?pageNo=1&pageSize=100&id=%s"
 
-DAUM_TV_DETAIL    = "http://m.movie.daum.net/tv/main.json?tvProgramId=%s"
-DAUM_TV_CAST      = "http://m.movie.daum.net/data/movie/tv/cast_crew.json?pageNo=1&pageSize=100&tvProgramId=%s"
-DAUM_TV_PHOTO     = "http://m.movie.daum.net/data/movie/photo/tv/list.json?pageNo=1&pageSize=100&id=%s"
-DAUM_TV_EPISODE   = "http://m.movie.daum.net/tv/episode?tvProgramId=%s"
+DAUM_TV_DETAIL    = "http://movie.daum.net/tv/main?tvProgramId=%s"
+#DAUM_TV_DETAIL    = "http://movie.daum.net/data/movie/tv/detail.json?tvProgramId=%s"
+DAUM_TV_CAST      = "http://movie.daum.net/data/movie/tv/cast_crew.json?pageNo=1&pageSize=100&tvProgramId=%s"
+DAUM_TV_PHOTO     = "http://movie.daum.net/data/movie/photo/tv/list.json?pageNo=1&pageSize=100&id=%s"
+DAUM_TV_EPISODE   = "http://movie.daum.net/tv/episode?tvProgramId=%s"
 
 IMDB_TITLE_SRCH   = "http://www.google.com/search?q=site:imdb.com+%s"
 TVDB_TITLE_SRCH   = "http://thetvdb.com/api/GetSeries.php?seriesname=%s"
@@ -50,28 +51,40 @@ def searchDaumMovie(cate, results, media, lang):
 def updateDaumMovie(cate, metadata):
   # (1) from detail page
   poster_url = None
-  
+
   if cate == 'tv':
-    page = HTTP.Request( DAUM_TV_DETAIL % metadata.id ).content
-    match = Regex('(.*programInfo.*),"relatedInfoUrls').search(page)
-    if match:
-      data = JSON.ObjectFromString(match.group(1) + '}}')
-      # info = data['programInfo']
-      programInfo = data['programInfo']
-      episodeList = data['episodeList']
-      metadata.title = programInfo['name']
-      metadata.original_title = programInfo['nameEn']
+    # data = JSON.ObjectFromURL(url=DAUM_TV_DETAIL % metadata.id)
+    # info = data['data']
+    # if info:
+    #   metadata.title = info['titleKo']
+    #   metadata.original_title = info['titleEn']
+    #   metadata.genres.clear()
+    #   try: metadata.rating = float(info['tvProgramPoint']['pointAvg'])
+    #   except: pass
+    #   metadata.genres.add(info['categoryHigh']['codeName'])
+    #   metadata.studio = info['channel']['titleKo'] if info['channel'] else ''
+    #   metadata.duration = 0
+    #   try: metadata.originally_available_at = Datetime.ParseDate(info['startDate']).date()
+    #   except: pass
+    #   metadata.summary = String.DecodeHTMLEntities(String.StripTags(info['introduce']).strip())
+    #   poster_url = info['photo']['fullname']
+    # else:
+    try:
+      html = HTML.ElementFromURL(DAUM_TV_DETAIL % metadata.id)
+      metadata.title = html.xpath('//div[@class="subject_movie"]/strong')[0].text
+      metadata.original_title = ''
+      metadata.rating = float(html.xpath('//div[@class="subject_movie"]/div/em')[0].text)
       metadata.genres.clear()
-      try: metadata.rating = float(data['userTvProgramRatingAverage']['avg_point'])
-      except: pass
-      metadata.genres.add(programInfo['genre'])
-      metadata.studio = episodeList[0]['channels'][0]['name']
-      metadata.duration = 0
-      try: metadata.originally_available_at = Datetime.ParseDate(episodeList[0]['channels'][0]['startDate']).date()
-      except: pass
-      #metadata.summary = String.DecodeHTMLEntities(String.StripTags(programInfo['introduceDescription']).strip())
-      metadata.summary = programInfo['introduceDescription'].replace('\r\n', '\n').strip()
-      poster_url = programInfo['mainImageUrl']
+      metadata.genres.add(html.xpath('//dl[@class="list_movie"]/dd[2]')[0].text)
+      metadata.studio = html.xpath('//dl[@class="list_movie"]/dd[1]/em')[0].text
+      match = Regex('(\d{8}\.\d{2}\.\d{2})~(\d{4}\.\d{2}\.\d{2})?').search(html.xpath('//dl[@class="list_movie"]/dd[4]')[0].text)
+      if match:
+        metadata.originally_available_at = Datetime.ParseDate(match.group(1)).date()
+      metadata.summary = String.DecodeHTMLEntities(String.StripTags(html.xpath('//p[@class="desc_movie"]')[0].text).strip())
+      poster_url = html.xpath('//img[@class="img_summary"]/@src')[0]
+    except Exception, e:
+      Log(repr(e))
+      pass
   else:
     data = JSON.ObjectFromURL(url=DAUM_MOVIE_DETAIL % metadata.id)
     info = data['data']
@@ -97,31 +110,77 @@ def updateDaumMovie(cate, metadata):
 
   # (2) cast crew
   directors = list()
+  producers = list()
   writers = list()
-  metadata.roles.clear()
+  roles = list()
+
   url_tmpl = DAUM_TV_CAST if cate == 'tv' else DAUM_MOVIE_CAST
   data = JSON.ObjectFromURL(url=url_tmpl % metadata.id)
   for item in data['data']:
     cast = item['castcrew']
     if cast['castcrewCastName'] in [u'감독', u'연출']:
-      directors.append(item['nameKo'] if item['nameKo'] else item['nameEn'])
-    elif cast['castcrewCastName'] == u'극본':
-      writers.append(item['nameKo'] if item['nameKo'] else item['nameEn'])
+      director = dict()
+      director['name'] = item['nameKo'] if item['nameKo'] else item['nameEn']
+      if item['photo']['fullname']:
+        director['photo'] = item['photo']['fullname']
+      directors.append(director)
+    elif cast['castcrewCastName'] == u'제작':
+      producer = dict()
+      producer['name'] = item['nameKo'] if item['nameKo'] else item['nameEn']
+      if item['photo']['fullname']:
+        producer['photo'] = item['photo']['fullname']
+      producers.append(producer)
+    elif cast['castcrewCastName'] in [u'극본', u'각본']:
+      writer = dict()
+      writer['name'] = item['nameKo'] if item['nameKo'] else item['nameEn']
+      if item['photo']['fullname']:
+        writer['photo'] = item['photo']['fullname']
+      writers.append(writer)
     elif cast['castcrewCastName'] in [u'주연', u'조연', u'출연', u'진행']:
-      role = metadata.roles.new()
-      role.role = cast['castcrewTitleKo']
-      role.actor = item['nameKo'] if item['nameKo'] else item['nameEn']
-      metadata.roles.add(role)
+      role = dict()
+      role['role'] = cast['castcrewTitleKo']
+      role['name'] = item['nameKo'] if item['nameKo'] else item['nameEn']
+      if item['photo']['fullname']:
+        role['photo'] = item['photo']['fullname']
+      roles.append(role)
     # else:
-    #   Log.Debug("unknown role: castcrewCastName=%s," % cast['castcrewCastName'])
+    #   Log.Debug("unknown role: castcrewCastName=%s" % cast['castcrewCastName'])
 
   if cate == 'movie':
-    metadata.directors.clear()
-    metadata.writers.clear()
-    for name in directors:
-      metadata.directors.add(name)
-    for name in writers:
-      metadata.writers.add(name)
+    if directors:
+      metadata.directors.clear()
+      for director in directors:
+        meta_director = metadata.directors.new()
+        if 'name' in director:
+          meta_director.name = director['name']
+        if 'photo' in director:
+          meta_director.photo = director['photo']
+    if producers:
+      metadata.producers.clear()
+      for producer in producers:
+        meta_producer = metadata.producers.new()
+        if 'name' in producer:
+          meta_producer.name = producer['name']
+        if 'photo' in producer:
+          meta_producer.photo = producer['photo']
+    if writers:
+      metadata.writers.clear()
+      for writer in writers:
+        meta_writer = metadata.writers.new()
+        if 'name' in writer:
+          meta_writer.name = writer['name']
+        if 'photo' in writer:
+          meta_writer.photo = writer['photo']
+    if roles:
+      metadata.roles.clear()
+      for role in roles:
+        meta_role = metadata.roles.new()
+        if 'role' in role:
+          meta_role.role = role['role']
+        if 'name' in role:
+          meta_role.name = role['name']
+        if 'photo' in role:
+          meta_role.photo = role['photo']
 
   # (3) from photo page
   url_tmpl = DAUM_TV_PHOTO if cate == 'tv' else DAUM_MOVIE_PHOTO
@@ -177,13 +236,22 @@ def updateDaumMovie(cate, metadata):
           episode.originally_available_at = Datetime.ParseDate(item['channels'][0]['broadcastDate'], '%Y%m%d').date()
         try: episode.rating = float(item['rate'])
         except: pass
-        episode.directors.clear()
-        episode.writers.clear()
-        for name in directors:
-          episode.directors.add(name)
-        for name in writers:
-          episode.writers.add(name)
-        #episode.thumbs[thumb_url] = Proxy.Preview(thumb_data)
+        if directors:
+          episode.directors.clear()
+          for director in directors:
+            meta_director = episode.directors.new()
+            if 'name' in director:
+              meta_director.name = director['name']
+            if 'photo' in director:
+              meta_director.photo = director['photo']
+        if writers:
+          episode.writers.clear()
+          for writer in writers:
+            meta_writer = episode.writers.new()
+            if 'name' in writer:
+              meta_writer.name = writer['name']
+            if 'photo' in writer:
+              meta_writer.photo = writer['photo']
 
     # (5) fill missing info
     # if Prefs['override_tv_id'] != 'None':
@@ -223,7 +291,7 @@ class DaumMovieTvAgent(Agent.TV_Shows):
   languages = [Locale.Language.Korean]
   accepts_from = ['com.plexapp.agents.localmedia']
 
-  def search(self, results, media, lang, manual=False):   
+  def search(self, results, media, lang, manual=False):
     return searchDaumMovie('tv', results, media, lang)
 
   def update(self, metadata, media, lang):

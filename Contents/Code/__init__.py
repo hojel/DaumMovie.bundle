@@ -25,7 +25,7 @@ RE_PHOTO_SIZE     =  Regex("/C\d+x\d+/")
 RE_IMDB_ID        =  Regex("/(tt\d+)/")
 
 def Start():
-  HTTP.CacheTime = CACHE_1WEEK
+  HTTP.CacheTime = CACHE_1HOUR * 12
   HTTP.Headers['Accept'] = 'text/html, application/json'
 
 ####################################################################################################

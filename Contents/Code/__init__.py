@@ -5,7 +5,8 @@ import urllib, unicodedata
 
 DAUM_MOVIE_SRCH   = "http://movie.daum.net/data/movie/search/v2/%s.json?size=20&start=1&searchText=%s"
 
-DAUM_MOVIE_DETAIL = "http://movie.daum.net/data/movie/movie_info/detail.json?movieId=%s"
+DAUM_MOVIE_DETAIL = "http://movie.daum.net/moviedb/main?movieId=%s"
+# DAUM_MOVIE_DETAIL = "http://movie.daum.net/data/movie/movie_info/detail.json?movieId=%s"
 DAUM_MOVIE_CAST   = "http://movie.daum.net/data/movie/movie_info/cast_crew.json?pageNo=1&pageSize=100&movieId=%s"
 DAUM_MOVIE_PHOTO  = "http://movie.daum.net/data/movie/photo/movie/list.json?pageNo=1&pageSize=100&id=%s"
 
@@ -22,6 +23,31 @@ RE_MOVIE_ID       =  Regex("movieId=(\d+)")
 RE_TV_ID          =  Regex("tvProgramId=(\d+)")
 RE_PHOTO_SIZE     =  Regex("/C\d+x\d+/")
 RE_IMDB_ID        =  Regex("/(tt\d+)/")
+
+JSON_MAX_SIZE     = 10 * 1024 * 1024
+
+DAUM_CR_TO_MPAA_CR = {
+    u'전체관람가': {
+        'KMRB': 'kr/A',
+        'MPAA': 'G'
+    },
+    u'12세이상관람가': {
+        'KMRB': 'kr/12',
+        'MPAA': 'PG'
+    },
+    u'15세이상관람가': {
+        'KMRB': 'kr/15',
+        'MPAA': 'PG-13'
+    },
+    u'청소년관람불가': {
+        'KMRB': 'kr/R',
+        'MPAA': 'R'
+    },
+    u'제한상영가': {     # 어느 여름날 밤에 (2016)
+        'KMRB': 'kr/X',
+        'MPAA': 'NC-17'
+    }
+}
 
 def Start():
   HTTP.CacheTime = CACHE_1HOUR * 12
@@ -60,7 +86,7 @@ def updateDaumMovie(cate, metadata):
       metadata.genres.clear()
       metadata.genres.add(html.xpath('//dl[@class="list_movie"]/dd[2]')[0].text)
       metadata.studio = html.xpath('//dl[@class="list_movie"]/dd[1]/em')[0].text
-      match = Regex('(\d{8}\.\d{2}\.\d{2})~(\d{4}\.\d{2}\.\d{2})?').search(html.xpath('//dl[@class="list_movie"]/dd[4]')[0].text)
+      match = Regex('(\d{4}\.\d{2}\.\d{2})~(\d{4}\.\d{2}\.\d{2})?').search(html.xpath('//dl[@class="list_movie"]/dd[4]')[0].text)
       if match:
         metadata.originally_available_at = Datetime.ParseDate(match.group(1)).date()
       metadata.summary = String.DecodeHTMLEntities(String.StripTags(html.xpath('//div[@class="desc_movie"]')[0].text).strip())
@@ -69,27 +95,73 @@ def updateDaumMovie(cate, metadata):
       Log.Debug(repr(e))
       pass
   else:
-    data = JSON.ObjectFromURL(url=DAUM_MOVIE_DETAIL % metadata.id)
-    info = data['data']
-    metadata.title = info['titleKo']
-    metadata.original_title = info['titleEn']
-    metadata.genres.clear()
-    metadata.year = int(info['prodYear'])
-    try: metadata.rating = float(info['moviePoint']['inspectPointAvg'])
-    except: pass
-    for item in info['genres']:
-      metadata.genres.add(item['genreName'])
-    try: metadata.duration = int(info['showtime'])*60
-    except: pass
-    try: metadata.originally_available_at = Datetime.ParseDate(info['releaseDate']).date()
-    except: pass
-    metadata.summary = String.DecodeHTMLEntities(String.StripTags(info['plot']).strip())
-
-    metadata.countries.clear()
-    for item in info['countries']:
-      metadata.countries.add(item['countryKo'])
-
-    poster_url = info['photo']['fullname']
+    try:
+      html = HTML.ElementFromURL(DAUM_MOVIE_DETAIL % metadata.id)
+      title = html.xpath('//div[@class="subject_movie"]/strong')[0].text
+      match = Regex('(.*?) \((\d{4})\)').search(title)
+      metadata.title = match.group(1)
+      metadata.year = int(match.group(2))
+      metadata.original_title = html.xpath('//span[@class="txt_movie"]')[0].text
+      metadata.rating = float(html.xpath('//div[@class="subject_movie"]/div/em')[0].text)
+      # 장르
+      metadata.genres.clear()
+      dds = html.xpath('//dl[contains(@class, "list_movie")]/dd')
+      for genre in dds.pop(0).text.split('/'):
+          metadata.genres.add(genre)
+      # 나라
+      metadata.countries.clear()
+      for country in dds.pop(0).text.split(','):
+          metadata.countries.add(country.strip())
+      # 개봉일 (optional)
+      match = Regex(u'(\d{4}\.\d{2}\.\d{2})\s*개봉').search(dds[0].text)
+      if match:
+        metadata.originally_available_at = Datetime.ParseDate(match.group(1)).date()
+        dds.pop(0)
+      # 재개봉 (optional)
+      match = Regex(u'(\d{4}\.\d{2}\.\d{2})\s*\(재개봉\)').search(dds[0].text)
+      if match:
+        dds.pop(0)
+      # 상영시간, 등급 (optional)
+      match = Regex(u'(\d+)분(?:, (.*?)\s*$)?').search(dds.pop(0).text)
+      if match:
+        metadata.duration = int(match.group(1))
+        cr = match.group(2)
+        if cr:
+          match = Regex(u'미국 (.*) 등급').search(cr)
+          if match:
+            metadata.content_rating = match.group(1)
+          elif cr in DAUM_CR_TO_MPAA_CR:
+            metadata.content_rating = DAUM_CR_TO_MPAA_CR[cr]['MPAA' if Prefs['use_mpaa'] else 'KMRB']
+          else:
+            metadata.content_rating = 'kr/' + cr
+      # Log.Debug('genre=%s, country=%s' %(','.join(g for g in metadata.genres), ','.join(c for c in metadata.countries)))
+      # Log.Debug('oaa=%s, duration=%s, content_rating=%s' %(metadata.originally_available_at, metadata.duration, metadata.content_rating))
+      metadata.summary = '\n'.join(txt.strip() for txt in html.xpath('//div[@class="desc_movie"]/p//text()'))
+      poster_url = html.xpath('//img[@class="img_summary"]/@src')[0]
+    except Exception, e:
+      Log.Debug(repr(e))
+      pass
+    # data = JSON.ObjectFromURL(url=DAUM_MOVIE_DETAIL % metadata.id)
+    # info = data['data']
+    # metadata.title = info['titleKo']
+    # metadata.original_title = info['titleEn']
+    # metadata.genres.clear()
+    # metadata.year = int(info['prodYear'])
+    # try: metadata.rating = float(info['moviePoint']['inspectPointAvg'])
+    # except: pass
+    # for item in info['genres']:
+    #   metadata.genres.add(item['genreName'])
+    # try: metadata.duration = int(info['showtime'])*60
+    # except: pass
+    # try: metadata.originally_available_at = Datetime.ParseDate(info['releaseDate']).date()
+    # except: pass
+    # metadata.summary = String.DecodeHTMLEntities(String.StripTags(info['plot']).strip())
+    #
+    # metadata.countries.clear()
+    # for item in info['countries']:
+    #   metadata.countries.add(item['countryKo'])
+    #
+    # poster_url = info['photo']['fullname']
 
   # (2) cast crew
   directors = list()
@@ -230,10 +302,11 @@ def updateDaumMovie(cate, metadata):
     page = HTTP.Request(DAUM_TV_EPISODE % metadata.id).content
     match = Regex('MoreView\.init\(\d+, (.*?)\);', Regex.DOTALL).search(page)
     if match:
-      data = JSON.ObjectFromString(match.group(1))
+      data = JSON.ObjectFromString(match.group(1), max_size = JSON_MAX_SIZE)
       for item in data:
-        episode_num = item['sequence']
-        episode = metadata.seasons['1'].episodes[episode_num]
+        episode_num = item['name']
+        if not episode_num: continue
+        episode = metadata.seasons['1'].episodes[int(episode_num)]
         episode.title = item['title']
         episode.summary = item['introduceDescription'].replace('\r\n', '\n').strip()
         if item['channels'][0]['broadcastDate']:

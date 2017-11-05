@@ -26,11 +26,5 @@
     "type": "enum",
     "values": [ "None", "TVDB" ],
     "default": "None"
-  },
-  {
-    "id": "use_mpaa",
-    "label": "Use MPAA film rating system",
-    "type": "bool",
-    "default": "false"
   }
 ]

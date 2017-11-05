@@ -11,7 +11,8 @@ DAUM_MOVIE_CAST   = "http://movie.daum.net/data/movie/movie_info/cast_crew.json?
 DAUM_MOVIE_PHOTO  = "http://movie.daum.net/data/movie/photo/movie/list.json?pageNo=1&pageSize=100&id=%s"
 
 DAUM_TV_DETAIL    = "http://movie.daum.net/tv/main?tvProgramId=%s"
-DAUM_TV_CAST      = "http://movie.daum.net/tv/crew?tvProgramId=%s"
+#DAUM_TV_DETAIL    = "http://movie.daum.net/data/movie/tv/detail.json?tvProgramId=%s"
+DAUM_TV_CAST      = "http://movie.daum.net/data/movie/tv/cast_crew.json?pageNo=1&pageSize=100&tvProgramId=%s"
 DAUM_TV_PHOTO     = "http://movie.daum.net/data/movie/photo/tv/list.json?pageNo=1&pageSize=100&id=%s"
 DAUM_TV_EPISODE   = "http://movie.daum.net/tv/episode?tvProgramId=%s"
 
@@ -78,6 +79,22 @@ def updateDaumMovie(cate, metadata):
   poster_url = None
 
   if cate == 'tv':
+    # data = JSON.ObjectFromURL(url=DAUM_TV_DETAIL % metadata.id)
+    # info = data['data']
+    # if info:
+    #   metadata.title = info['titleKo']
+    #   metadata.original_title = info['titleEn']
+    #   metadata.genres.clear()
+    #   try: metadata.rating = float(info['tvProgramPoint']['pointAvg'])
+    #   except: pass
+    #   metadata.genres.add(info['categoryHigh']['codeName'])
+    #   metadata.studio = info['channel']['titleKo'] if info['channel'] else ''
+    #   metadata.duration = 0
+    #   try: metadata.originally_available_at = Datetime.ParseDate(info['startDate']).date()
+    #   except: pass
+    #   metadata.summary = String.DecodeHTMLEntities(String.StripTags(info['introduce']).strip())
+    #   poster_url = info['photo']['fullname']
+    # else:
     try:
       html = HTML.ElementFromURL(DAUM_TV_DETAIL % metadata.id)
       metadata.title = html.xpath('//div[@class="subject_movie"]/strong')[0].text
@@ -89,10 +106,10 @@ def updateDaumMovie(cate, metadata):
       match = Regex('(\d{4}\.\d{2}\.\d{2})~(\d{4}\.\d{2}\.\d{2})?').search(html.xpath('//dl[@class="list_movie"]/dd[4]')[0].text)
       if match:
         metadata.originally_available_at = Datetime.ParseDate(match.group(1)).date()
-      metadata.summary = String.DecodeHTMLEntities(String.StripTags(html.xpath('//div[@class="desc_movie"]')[0].text).strip())
+      metadata.summary = String.DecodeHTMLEntities(String.StripTags(html.xpath('//p[@class="desc_movie"]')[0].text).strip())
       poster_url = html.xpath('//img[@class="img_summary"]/@src')[0]
     except Exception, e:
-      Log.Debug(repr(e))
+      Log(repr(e))
       pass
   else:
     try:
@@ -169,58 +186,37 @@ def updateDaumMovie(cate, metadata):
   writers = list()
   roles = list()
 
-  if cate == 'tv':
-    try:
-      html = HTML.ElementFromURL(DAUM_TV_CAST % metadata.id)
-      for item in html.xpath('//a[@class="link_join"]'):
-        cast = dict()
-        cast['name'] = item.xpath('.//*[@class="tit_join"]/em/text()')[0]
-        match = Regex(u'^(.*?)( 역)?$').search(item.xpath('.//*[@class="txt_join"]/text()')[0])
-        cast['role'] = match.group(1)
-        cast['photo'] = item.xpath('.//img[@class="thumb_photo"]/@src')[0]
-
-        if cast['role'] in [u'감독', u'연출']:
-          directors.append(cast)
-        elif cast['role'] == u'제작':
-          producers.append(cast)
-        elif cast['role'] in [u'극본', u'각본']:
-          writers.append(cast)
-        else:
-          roles.append(cast)
-    except Exception, e:
-      Log.Debug(repr(e))
-      pass
-  else:
-    data = JSON.ObjectFromURL(url=DAUM_MOVIE_CAST % metadata.id)
-    for item in data['data']:
-      cast = item['castcrew']
-      if cast['castcrewCastName'] in [u'감독', u'연출']:
-        director = dict()
-        director['name'] = item['nameKo'] if item['nameKo'] else item['nameEn']
-        if item['photo']['fullname']:
-          director['photo'] = item['photo']['fullname']
-        directors.append(director)
-      elif cast['castcrewCastName'] == u'제작':
-        producer = dict()
-        producer['name'] = item['nameKo'] if item['nameKo'] else item['nameEn']
-        if item['photo']['fullname']:
-          producer['photo'] = item['photo']['fullname']
-        producers.append(producer)
-      elif cast['castcrewCastName'] in [u'극본', u'각본']:
-        writer = dict()
-        writer['name'] = item['nameKo'] if item['nameKo'] else item['nameEn']
-        if item['photo']['fullname']:
-          writer['photo'] = item['photo']['fullname']
-        writers.append(writer)
-      elif cast['castcrewCastName'] in [u'주연', u'조연', u'출연', u'진행']:
-        role = dict()
-        role['role'] = cast['castcrewTitleKo']
-        role['name'] = item['nameKo'] if item['nameKo'] else item['nameEn']
-        if item['photo']['fullname']:
-          role['photo'] = item['photo']['fullname']
-        roles.append(role)
-      # else:
-      #   Log.Debug("unknown role: castcrewCastName=%s" % cast['castcrewCastName'])
+  url_tmpl = DAUM_TV_CAST if cate == 'tv' else DAUM_MOVIE_CAST
+  data = JSON.ObjectFromURL(url=url_tmpl % metadata.id)
+  for item in data['data']:
+    cast = item['castcrew']
+    if cast['castcrewCastName'] in [u'감독', u'연출']:
+      director = dict()
+      director['name'] = item['nameKo'] if item['nameKo'] else item['nameEn']
+      if item['photo']['fullname']:
+        director['photo'] = item['photo']['fullname']
+      directors.append(director)
+    elif cast['castcrewCastName'] == u'제작':
+      producer = dict()
+      producer['name'] = item['nameKo'] if item['nameKo'] else item['nameEn']
+      if item['photo']['fullname']:
+        producer['photo'] = item['photo']['fullname']
+      producers.append(producer)
+    elif cast['castcrewCastName'] in [u'극본', u'각본']:
+      writer = dict()
+      writer['name'] = item['nameKo'] if item['nameKo'] else item['nameEn']
+      if item['photo']['fullname']:
+        writer['photo'] = item['photo']['fullname']
+      writers.append(writer)
+    elif cast['castcrewCastName'] in [u'주연', u'조연', u'출연', u'진행']:
+      role = dict()
+      role['role'] = cast['castcrewTitleKo']
+      role['name'] = item['nameKo'] if item['nameKo'] else item['nameEn']
+      if item['photo']['fullname']:
+        role['photo'] = item['photo']['fullname']
+      roles.append(role)
+    # else:
+    #   Log.Debug("unknown role: castcrewCastName=%s" % cast['castcrewCastName'])
 
   if cate == 'movie':
     if directors:

@@ -60,7 +60,7 @@ def updateDaumMovie(cate, metadata):
       metadata.genres.clear()
       metadata.genres.add(html.xpath('//dl[@class="list_movie"]/dd[2]')[0].text)
       metadata.studio = html.xpath('//dl[@class="list_movie"]/dd[1]/em')[0].text
-      match = Regex('(\d{8}\.\d{2}\.\d{2})~(\d{4}\.\d{2}\.\d{2})?').search(html.xpath('//dl[@class="list_movie"]/dd[4]')[0].text)
+      match = Regex('(\d{4}\.\d{2}\.\d{2})~(\d{4}\.\d{2}\.\d{2})?').search(html.xpath('//dl[@class="list_movie"]/dd[4]')[0].text)
       if match:
         metadata.originally_available_at = Datetime.ParseDate(match.group(1)).date()
       metadata.summary = String.DecodeHTMLEntities(String.StripTags(html.xpath('//div[@class="desc_movie"]')[0].text).strip())
@@ -232,7 +232,7 @@ def updateDaumMovie(cate, metadata):
     if match:
       data = JSON.ObjectFromString(match.group(1))
       for item in data:
-        episode_num = item['sequence']
+        episode_num = item['sequence']-1
         episode = metadata.seasons['1'].episodes[episode_num]
         episode.title = item['title']
         episode.summary = item['introduceDescription'].replace('\r\n', '\n').strip()
